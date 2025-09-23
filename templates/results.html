@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analysis Results - Lead Frame Mapping Tool</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Analysis Results</h1>
+            <p>Column-Filtered Lead Frame and Handler Kit Analysis</p>
+            <p>Current Time: {{ current_time }} UTC+8 | User: {{ current_user }}</p>
+            <p>Version: {{ app_version }}</p>
+        </div>
+        
+        <div class="content">
+            <div style="margin-bottom: 20px;">
+                <a href="/" class="back-link">← Back to Home</a>
+                <a href="/handler_kit_database" class="btn">📋 Handler Kit Database</a>
+                <a href="/compatible_kits" class="btn">✅ Compatible Kits</a>
+            </div>
+            
+            {% if no_results %}
+            <div class="section text-center">
+                {% if error_message %}
+                <h3>❌ Error Loading Results</h3>
+                <div class="error-message" style="background: #f8d7da; color: #721c24; padding: 15px; border: 1px solid #f5c6cb; border-radius: 4px; margin: 20px 0;">
+                    <strong>Error Details:</strong> {{ error_message }}
+                </div>
+                {% else %}
+                <h3>📦 No Analysis Results Found</h3>
+                <p>You haven't run any analysis yet. Upload Lead Frame and Handler Kit files first, then perform column-filtered analysis.</p>
+                {% endif %}
+                
+                <div style="margin: 30px 0;">
+                    <h4>🚀 Getting Started:</h4>
+                    <ol style="text-align: left; display: inline-block; margin: 20px 0;">
+                        <li>Upload Lead Frame DXF files</li>
+                        <li>Upload Handler Kit Excel files</li>
+                        <li>Run column-filtered analysis</li>
+                        <li>View results here</li>
+                    </ol>
+                </div>
+                
+                <a href="/" class="btn btn-primary">🏠 Go to Upload Page</a>
+                <a href="/handler_kit_database" class="btn btn-info">📋 View Handler Kits</a>
+            </div>
+            
+            {% else %}
+            <div class="section">
+                <h2>📈 Analysis Results Summary</h2>
+                <p><strong>Total Analyses:</strong> {{ sorted_analysis_results|length }}</p>
+                <p><strong>Last Updated:</strong> {{ current_time }} UTC+8 by {{ current_user }}</p>
+            </div>
+            
+            <div class="results-grid">
+                {% for analysis_id, data in sorted_analysis_results %}
+                <div class="result-card">
+                    <h3>🔍 Analysis: {{ analysis_id }}</h3>
+                    
+                    <div class="result-info">
+                        <p><strong>📅 Time:</strong> {{ calculate_time_ago(data.get('analysis_time', '')) }}</p>
+                        <p><strong>📊 Status:</strong> 
+                            {% if data.get('status') == 'completed' %}
+                                <span class="status-success">✅ Completed</span>
+                            {% elif data.get('status') == 'failed' %}
+                                <span class="status-error">❌ Failed</span>
+                            {% else %}
+                                <span class="status-warning">⏳ {{ data.get('status', 'Unknown') }}</span>
+                            {% endif %}
+                        </p>
+                        
+                        {% if data.get('lead_frame_info') %}
+                        <p><strong>🗺️ Lead Frame:</strong> {{ data.lead_frame_info.get('filename', 'Unknown') }}</p>
+                        {% endif %}
+                        
+                        {% if data.get('suitable_kits') %}
+                        <p><strong>✅ Compatible Kits:</strong> {{ data.suitable_kits|length }}</p>
+                        {% endif %}
+                        
+                        {% if data.get('analysis_params') %}
+                        <div class="analysis-params">
+                            <h4>⚙️ Parameters:</h4>
+                            <ul>
+                                {% for key, value in data.analysis_params.items() %}
+                                <li><strong>{{ key }}:</strong> {{ value }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if data.get('suitable_kits') and data.suitable_kits|length > 0 %}
+                    <div class="compatible-kits-preview">
+                        <h4>🎯 Compatible Handler Kits:</h4>
+                        <ul>
+                            {% for kit in data.suitable_kits[:3] %}
+                            <li>📋 {{ kit.get('filename', 'Unknown Kit') }}</li>
+                            {% endfor %}
+                            {% if data.suitable_kits|length > 3 %}
+                            <li>... and {{ data.suitable_kits|length - 3 }} more</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="result-actions">
+                        <a href="/compatible_kits" class="btn btn-sm">📋 View Details</a>
+                        {% if data.get('download_link') %}
+                        <a href="{{ data.download_link }}" class="btn btn-sm btn-success">💾 Download Results</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📊 Analysis Results page loaded for {{ current_user }}');
+            console.log('📅 Current time: 2025-08-29 01:31:34 UTC');
+            console.log('📈 Total results: {{ sorted_analysis_results|length }}');
+            
+            // Add auto-refresh for active analyses
+            const hasActiveAnalyses = {{ 'true' if sorted_analysis_results and any(data.get('status') == 'running' for _, data in sorted_analysis_results) else 'false' }};
+            
+            if (hasActiveAnalyses) {
+                console.log('🔄 Auto-refresh enabled for active analyses');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 30000); // Refresh every 30 seconds for active analyses
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+********************************Python file architecture******************************************
+Main.py   # Integrate the extract dxf function and generate shapes_summary.xlsx for the next step.
+- extract_dxf_v2.py   # Extract dxf files by ezdxf
+- plot_v2.py
+analyze_origin.py   # Extract the dimention layer of shapes_summary.xlsx and find the origin of the new LF coordinate, and also transform the vacuum cups coordinate to the new LF coordinate.
+mapping.py   # Map the vacuum cups on the Lead Frame layers, visualize it and show to the user.
+dxf_diagnosis.py   # Display the ammounts of vacuum cups, and also display the middlepoint of the LF and all shapes in LF DXF file. 
+
+********************** How to find the origin of Lead Frame ****************************
+
+1.  According to the obeservation, I found that if the length of the dimention line is not too small
+    (2mm for temporaily thershold), the actual dimention length will be measured from MAX(delta x, delta y).
+--------------------------------------------------------------------------------------------------------------
+2.  I'll take the ShapeID B0C92FD for example, the two defpoints are (726.0998915586204, 285.2546000935866) 
+    and (696.9093473114067, 463.2546000935867), delta x=|726.09989-696.909347|=29.19 and 
+    delta y=|285.254-463254|=178 , since the delta y is bigger than delta x, delta y will be 
+    represents as y length. 
+--------------------------------------------------------------------------------------------------------------
+3.  Continue operate the same action and we can find the largest delta x and largest delta y, 
+    which represents the total length and width respectively. 
+--------------------------------------------------------------------------------------------------------------
+4.  Then I'll find midpoint of the largest delta x and largest delta y and their intersection point 
+    will be the origin point of the Lead Frame drawing, and I'll create a new coordinate system with it.
+--------------------------------------------------------------------------------------------------------------
+
+********************************* Next Step ********************************************
+
+1.  I have the .xlsx which contains the actual vacuum cups location (mm for unit), since the scale of the 
+    Lead Frame is 1:2, so that the dimention of the LF is actually twice of the actual length(mm for unit).
+    So I need to times two of the vacuum cups coordinate to match the scale.
+--------------------------------------------------------------------------------------------------------------
+2.  Then I'll transform their coordinates to the actual location in the DXF drawing, for example, if the
+    vacuum cupA is on (43.75, -17.5), then according to the scale transform, the new coordinate of cupA will
+    be (87.5, -35). The next step will be transform to actual location, if the origin of the LF is at 
+    (450, 500), then vacuum cupA's coordinate will be (450+87.5, 500-35)=(537.5, 465).
+--------------------------------------------------------------------------------------------------------------
+3.  找到每個INSERT對應的block name -> 取出block definition (doc.blocks[block_name]) -> 對block內容每個幾何物件做
+    矩陣運算(平移、旋轉、縮放) -> 用matplotlib畫出所有線段、多邊形、圓等。
+
+3.a Instead of using the vectorization method, I found it more instinct by plotting selected layer of LF
+    drawing by matplot, and draw the vacuum cups on it.
+
+4.  
+
+07.31.2025
+Operate Step: main.py -> analyze_origin.py -> mapping.py
+Optimization: 1. cumtomize bbox by searching the contour of SH-01_OBECT
+
+-For now, my vacuum cups an Lead Frame overlay process is execute the analyze_origin.py first, map the vacuum cups to the new LF coordinate, 
+ then I'll check whether the vacuum cups are overlaid with SH-01_OBJECT and SH-01_PKG layers. But with this procedure I found it difficult to 
+ find the SH-01_OBJECT layers on LF, because the strip drawing of the LF is duplicate by a template(this template is drawn by SH-01_OBJECT), 
+ but the duplicate ones are at layer 0. Here's the point, when I want to show layer 0 by ezdxf and matplot, it remains empty. So I start to 
+ extract INSERT entities, and use a matrix44 to do the relocate, rotate and scale, but I still struggle at printing the actual LF drawing I saw on the autodesk DWG program.
+
+-So instead of trying to extract the layers and entities of the ASCII of the DXF file, I tried to plot the SH-01_layers by ezdxf and plt function. 
+ And this way I could easily show the designated layer on the matplot, I  wonder why this happened? So due to this observation, I use the second 
+ way to draw the vacuum cups with the new coordinates on the Lead Frame drawing, and I get a plot with the overlap of vacuum cups and the "SH-01_OBJECT" and "SH-01_PKG" by mapping.py.
+
+-For the next step I want to report a warning to user interface when the vacuum cups overlaps with the designated layers, but there's a serious problem 
+ with the case when the scale of LF&vacuum cups overlap drawing is small, the thickness of the vacuum cups contour is big, but after I zoom in a portion
+ of the entire drawing, the thickness of the vacuum cups becomes thinner. So I'm not sure how to overlapped them with LF layers, this is the main concern 
+ for now. Tell me if I misunderstand or have a misleading concept of the mapping dection method, and also tell me what addition python files you need for 
+ giving me the most precise analyze.
+
+-At last, I want to do a little optimization about the dxf_bbox of the display, I want to let the dxf_bbox refer the (min_x, min_y, max_x, max_y) 
+ value in shapes_summary_boundary.xlsx, and then I don't need to adjust the contour of the dxf_bbox manually.
+
+08.01.2025
+1. I want to cumtomize the LF width&height ratio by the user input a new Lead Frame design.
+2. Implement a logic for checking overlap and report the result to the user.
+3. Create API(e.g: by .json), to connect the xlsx database to be the basis of implement automated matching tool
+
+08.04.2025
+-直徑3mm, 厚度0.6mm的圓
+-輸入要從一張LF與一個vacuum cups table轉換成一張LF與多個vacuum cups tables去做交叉比對，找到最適合的那個vacuum cups table.
+-Extend usages of mapping tool:
+    1.  First, I want to parse different dxf files by main.py & extract_dxf.py and generate different .xlsx tables
+        for it. For now, I could only choose only dxf file and extract it's designated layers onto a single .xlsx
+        table for it. But now I wanted to extract several Lead Frame DXF files and create different .xlsx files 
+        for them, stored at C:\Users\a1246807\Plunger_extraction\Mapping_Tool\output\shapes_summary\ and their own
+        file name will be named by their DXF file names like this: shapes_summary_(DXF file names).
+    2.  Secondly, after generate shapes_summary.xlsx files for each DXF files, I want to use analyze_origin.py
+        function to generate new origin and LF coordinates, and also their own boundary.After execute analyze_origin.py
+        , it will generate vac_cups.xlsx for every vacuum cups location which is transformed from plunger.xlsx.
+        And for the future, the plunger.xlsx will not only be one excel but several different kinds vacuum cups 
+        of plunger,load shuttle, and unload shuttle. Also, after execute analyze_origin.py, it will also generate
+        shapes_summary_boundary.py and shapes_summary_with_origin.py for each Lead Frame DXF files, and save them
+        with the shapes_summary.xlsx files into the same folder.
+    3.  Then this step will execute mapping.py, and generate LF_with_vacuum_cups_overlay_visualization_only.png,
+        LF_with_vacuum_cups_overlay_with_overlap_detection.png and also overlap_analysis_report.xlsx for LF to 
+        every vac_cups.xlsx. This part is still uncertain, if the big-Ohh is too large, skip this procedure.
+        The final result will be to inform the user whether we have the matchable Handler Kit(Vacuum cups on it
+        doesn't overlap the LF designated layers), if we have, tell the user which one matches the Lead Frame. 
+    
+-----------------------modified: 4:53 pm, 08042025.------------------------------
+08.08.2025
+week 7 plan
+1.  aditional function: QFN mapping tool
+2.  Think about a solution to reduce time complexity -> add more optional feature that can be customized by user
+3.  optimize mapping tool app (User friendly)
+4.  If time permits, train the OCR model or change to easyOCR instead (not urgent)

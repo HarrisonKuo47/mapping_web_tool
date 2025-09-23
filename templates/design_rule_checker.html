@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Design Rule Checker - Lead Frame Mapping Tool</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📏 Design Rule Checker</h1>
+            <p>Check dimensions and vacuum positions with size adjustment</p>
+            <p>Current Time: {{ current_time }} UTC+8 | User: {{ current_user }}</p>
+        </div>
+        
+        <div class="content">
+            <div style="margin-bottom: 20px;">
+                <a href="/" class="back-link">← Back to Home</a>
+                <a href="/design_rules_summary" class="btn btn-info">📊 View Summary</a>
+            </div>
+            
+            <!-- Design Rule Standards -->
+            <div class="section">
+                <h2>📐 Design Rule Standards</h2>
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Length Requirements</span>
+                        <p><strong>Min:</strong> {{ design_rules.length_width_rules.min_length }} mm</p>
+                        <p><strong>Max:</strong> {{ design_rules.length_width_rules.max_length }} mm</p>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Width Requirements</span>
+                        <p><strong>Min:</strong> {{ design_rules.length_width_rules.min_width }} mm</p>
+                        <p><strong>Max:</strong> {{ design_rules.length_width_rules.max_width }} mm</p>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Vacuum Settings</span>
+                        <p><strong>Diameter:</strong> {{ design_rules.vacuum_position_rules.vacuum_diameter_mm }} mm</p>
+                        <p><strong>Scan:</strong> Top-Right → Top-Left</p>
+                    </div>
+                </div>
+            </div>
+            
+            {% if processed_files %}
+            <div class="section">
+                <h2>🔧 Lead Frame Design Rule Check</h2>
+                
+                <div class="result-grid">
+                    {% for file in processed_files %}
+                    <div class="result-card">
+                        <h3>{{ file.folder_name }}</h3>
+                        <div class="file-info">
+                            <p><strong>Original:</strong> {{ file.width }} × {{ file.height }} mm</p>
+                            <p><strong>Shapes:</strong> {{ file.shapes_count }}</p>
+                            <p><strong>Status:</strong> 
+                                {% if file.has_design_check %}
+                                    <span class="status-suitable">✅ Checked</span>
+                                {% else %}
+                                    <span class="status-unsuitable">⚠️ Not Checked</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        
+                        <!-- Simple Controls -->
+                        <div class="simple-controls">
+                            <label><strong>Size Adjustment Factor:</strong></label>
+                            <input type="number" 
+                                   id="adjustment-{{ file.folder_name }}" 
+                                   step="0.01" 
+                                   min="0.01" 
+                                   max="10" 
+                                   value="0.5" 
+                                   onchange="updatePreview('{{ file.folder_name }}')"
+                                   style="width: 80px; margin: 5px;">
+                            <small>(0.5 = half size)</small>
+                            
+                            <br><br>
+                            
+                            <label><strong>Required Vacuum Positions:</strong></label>
+                            <input type="number" 
+                                   id="vacuum-positions-{{ file.folder_name }}" 
+                                   step="1" 
+                                   min="5" 
+                                   max="20" 
+                                   value="10" 
+                                   style="width: 60px; margin: 5px;">
+                            <small>(5-20)</small>
+                            
+                            <br><br>
+                            
+                            <label>
+                                <input type="checkbox" 
+                                       id="enable-vacuum-{{ file.folder_name }}" 
+                                       checked>
+                                <strong>Enable Vacuum Scanning</strong>
+                            </label>
+                            
+                            <div class="preview" id="preview-{{ file.folder_name }}" style="margin-top: 10px;">
+                                <small>Adjusted: {{ "%.1f"|format(file.width * 0.5) }} × {{ "%.1f"|format(file.height * 0.5) }} mm</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="design-rule-actions" style="margin-top: 15px;">
+                            <button type="button" class="btn btn-primary" onclick="checkDesignRules('{{ file.folder_name }}')">
+                                🚀 Check Design Rules
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="checkDimensionOnly('{{ file.folder_name }}')">
+                                ⚡ Dimension Only
+                            </button>
+                        </div>
+                        
+                        <!-- Results -->
+                        <div class="check-result" id="result-{{ file.folder_name }}" style="display: none;"></div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            {% else %}
+            <div class="section text-center">
+                <h3>❌ No Processed Lead Frames Found</h3>
+                <p>Upload and process some Lead Frame DXF files first.</p>
+                <a href="/" class="btn btn-primary">🔙 Go to Upload Page</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        // Store original dimensions
+        const originalDimensions = {
+            {% for file in processed_files %}
+            '{{ file.folder_name }}': {
+                width: {{ file.width }},
+                height: {{ file.height }}
+            },
+            {% endfor %}
+        };
+        
+        const designRules = {{ design_rules | tojson }};
+
+        function updatePreview(folderName) {
+            const adjustmentInput = document.getElementById(`adjustment-${folderName}`);
+            const factor = parseFloat(adjustmentInput.value) || 0.5;
+            
+            const original = originalDimensions[folderName];
+            if (original) {
+                const adjustedWidth = (original.width * factor).toFixed(1);
+                const adjustedHeight = (original.height * factor).toFixed(1);
+                const vacuumDiameter = (designRules.vacuum_position_rules.vacuum_diameter_mm / factor).toFixed(1);
+                
+                document.getElementById(`preview-${folderName}`).innerHTML = 
+                    `<small>Adjusted: ${adjustedWidth} × ${adjustedHeight} mm | Vacuum: ${vacuumDiameter} mm</small>`;
+            }
+        }
+        
+        async function checkDesignRules(folderName) {
+            const submitBtn = document.querySelector(`button[onclick="checkDesignRules('${folderName}')"]`);
+            const resultDiv = document.getElementById(`result-${folderName}`);
+            
+            const adjustmentInput = document.getElementById(`adjustment-${folderName}`);
+            const vacuumPositionsInput = document.getElementById(`vacuum-positions-${folderName}`);
+            const enableVacuumCheckbox = document.getElementById(`enable-vacuum-${folderName}`);
+            
+            const adjustmentFactor = parseFloat(adjustmentInput.value);
+            const requiredVacuumPositions = parseInt(vacuumPositionsInput.value);
+            const enableVacuumScanning = enableVacuumCheckbox.checked;
+            
+            // Simple validation
+            if (isNaN(adjustmentFactor) || adjustmentFactor <= 0 || adjustmentFactor > 10) {
+                alert('Please enter a valid adjustment factor between 0.01 and 10');
+                return;
+            }
+            
+            if (isNaN(requiredVacuumPositions) || requiredVacuumPositions < 5 || requiredVacuumPositions > 20) {
+                alert('Please enter valid vacuum positions between 5 and 20');
+                return;
+            }
+            
+            submitBtn.innerHTML = '🔄 Checking...';
+            submitBtn.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('leadframe_folder', folderName);
+                formData.append('size_adjustment_factor', adjustmentFactor.toString());
+                formData.append('required_vacuum_positions', requiredVacuumPositions.toString());
+                formData.append('enable_vacuum_scanning', enableVacuumScanning.toString());
+                
+                const response = await fetch('/check_design_rules', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    displayResults(result, folderName);
+                } else {
+                    displayError(result, folderName);
+                }
+                
+            } catch (error) {
+                displayError({message: error.message}, folderName);
+            }
+            
+            submitBtn.innerHTML = '🚀 Check Design Rules';
+            submitBtn.disabled = false;
+        }
+        
+        async function checkDimensionOnly(folderName) {
+            const submitBtn = document.querySelector(`button[onclick="checkDimensionOnly('${folderName}')"]`);
+            const adjustmentInput = document.getElementById(`adjustment-${folderName}`);
+            const adjustmentFactor = parseFloat(adjustmentInput.value);
+            
+            if (isNaN(adjustmentFactor) || adjustmentFactor <= 0 || adjustmentFactor > 10) {
+                alert('Please enter a valid adjustment factor');
+                return;
+            }
+            
+            submitBtn.innerHTML = '⚡ Checking...';
+            submitBtn.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('leadframe_folder', folderName);
+                formData.append('size_adjustment_factor', adjustmentFactor.toString());
+                formData.append('enable_vacuum_scanning', 'false');
+                
+                const response = await fetch('/check_design_rules', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    displayResults(result, folderName);
+                } else {
+                    displayError(result, folderName);
+                }
+                
+            } catch (error) {
+                displayError({message: error.message}, folderName);
+            }
+            
+            submitBtn.innerHTML = '⚡ Dimension Only';
+            submitBtn.disabled = false;
+        }
+        
+        function displayResults(result, folderName) {
+            const resultDiv = document.getElementById(`result-${folderName}`);
+            const checkResult = result.check_result.enhanced_check || result.check_result;
+            const overallStatus = result.check_result.overall_status || checkResult.status;
+            const vacuumPerformed = result.check_result.vacuum_scanning_performed;
+            
+            let statusIcon = overallStatus === 'PASS' ? '✅' : '❌';
+            let statusClass = overallStatus === 'PASS' ? 'suitable' : 'unsuitable';
+            
+            let html = `
+                <div class="analysis-item ${statusClass}">
+                    <h4>${statusIcon} Result: ${overallStatus}</h4>
+                    
+                    <p><strong>Original:</strong> ${checkResult.original_dimensions.width} × ${checkResult.original_dimensions.height} mm</p>
+                    <p><strong>Adjusted:</strong> ${checkResult.adjusted_dimensions.width} × ${checkResult.adjusted_dimensions.height} mm</p>
+                    <p><strong>Length:</strong> ${checkResult.adjusted_dimensions.length} mm</p>
+                    <p><strong>Width:</strong> ${checkResult.adjusted_dimensions.width_dim} mm</p>
+            `;
+            
+            // Dimension violations
+            const violations = checkResult.dimension_check ? checkResult.dimension_check.violations : checkResult.violations;
+            if (violations && violations.length > 0) {
+                html += `<div class="error-message"><h5>❌ Dimension Issues:</h5><ul>`;
+                violations.forEach(v => html += `<li>${v}</li>`);
+                html += `</ul></div>`;
+            }
+            
+            // Vacuum results
+            if (vacuumPerformed && checkResult.vacuum_position_check) {
+                const vacuum = checkResult.vacuum_position_check;
+                html += `
+                    <h5>🔬 Vacuum Check: ${vacuum.status}</h5>
+                    <p><strong>Required:</strong> ${vacuum.required_positions} | <strong>Found:</strong> ${vacuum.positions_found}</p>
+                    <p><strong>Vacuum Size:</strong> ${vacuum.vacuum_diameter_mm_adjusted} mm</p>
+                `;
+                
+                if (vacuum.status === 'FAIL') {
+                    html += `<p style="color: red;">❌ Not enough vacuum positions found</p>`;
+                } else if (vacuum.status === 'PASS') {
+                    html += `<p style="color: green;">✅ Sufficient vacuum positions found</p>`;
+                }
+            } else if (vacuumPerformed === false) {
+                html += `<p>⚠️ Vacuum scanning skipped (files not found)</p>`;
+            }
+            
+            html += `<small>Checked: 2025-09-04 09:56:00 by HarrisonKuo47</small></div>`;
+            
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+            
+            // Update status
+            const statusSpan = resultDiv.closest('.result-card').querySelector('.status-unsuitable, .status-suitable');
+            if (statusSpan) {
+                statusSpan.className = overallStatus === 'PASS' ? 'status-suitable' : 'status-unsuitable';
+                statusSpan.innerHTML = overallStatus === 'PASS' ? '✅ Checked' : '❌ Failed';
+            }
+        }
+        
+        function displayError(result, folderName) {
+            const resultDiv = document.getElementById(`result-${folderName}`);
+            resultDiv.innerHTML = `
+                <div class="error-message">
+                    <h4>❌ Error</h4>
+                    <p>${result.message}</p>
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Design Rule Checker loaded for HarrisonKuo47 at 2025-09-04 09:56:00');
+            
+            // Initialize previews
+            Object.keys(originalDimensions).forEach(folderName => {
+                updatePreview(folderName);
+            });
+        });
+    </script>
+    
+    <style>
+        .simple-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .simple-controls label {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .simple-controls input[type="number"] {
+            padding: 5px 8px;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .simple-controls input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .preview {
+            color: #007bff;
+            font-weight: bold;
+        }
+        
+        .design-rule-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .design-rule-actions .btn {
+            flex: 1;
+            padding: 10px;
+        }
+    </style>
+</body>
+</html>

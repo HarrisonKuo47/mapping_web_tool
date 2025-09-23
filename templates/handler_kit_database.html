@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Handler Kit Database - PKG & LF Types</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Handler Kit Database</h1>
+            <p>PKG & LF Type Column-Based Classification</p>
+            <p>Last Updated: {{ current_time }} UTC+8 | Total: {{ total_kits }} Handler Kits | User: {{ current_user }}</p>
+            <p>Version: {{ app_version }} | Build: {{ build_date }} {{ build_time }}</p>
+        </div>
+        
+        <div class="content">
+            <div style="margin-bottom: 20px;">
+                <a href="/" class="back-link">← Back to Home</a>
+                <a href="/api/metadata/refresh" class="btn btn-success">🔄 Refresh Cache</a>
+                <a href="/results" class="btn">📊 View Results</a>
+                <a href="/compatible_kits" class="btn">✅ Compatible Kits</a>
+            </div>
+            
+            <!-- DEBUG INFO -->
+            <div class="info-box" style="margin-bottom: 20px;">
+                <h4>🔍 Debug Information</h4>
+                <p><strong>Total Cache Items:</strong> {{ total_kits }}</p>
+                <p><strong>Valid Handler Kits:</strong> {{ handler_kit_data|length }}</p>
+                <p><strong>Current Time:</strong> 2025-08-28 02:49:08 UTC</p>
+                <p><strong>User:</strong> HarrisonKuo47</p>
+            </div>
+            
+            {% if total_kits > 0 and handler_kit_data|length > 0 %}
+            <div class="section-header">
+                <h2>📦 PKG Type Distribution</h2>
+            </div>
+            <div class="stats-grid">
+                {% for pkg_type, count in pkg_stats.items() %}
+                <div class="stat-card">
+                    <div class="stat-number">{{ count }}</div>
+                    <div class="stat-label">{{ pkg_type }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="section-header">
+                <h2>🔗 LF Type Distribution</h2>
+            </div>
+            <div class="stats-grid">
+                {% for lf_type, count in lf_stats.items() %}
+                <div class="stat-card">
+                    <div class="stat-number">{{ count }}</div>
+                    <div class="stat-label">{{ lf_type }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="section">
+                <div class="form-group">
+                    <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search handler kits by filename, device type, or part number..." style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                </div>
+            </div>
+            
+            <h2>📊 Handler Kit Inventory</h2>
+            <div style="overflow-x: auto;">
+                <table class="database-table" id="handlerKitTable">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>PKG Type</th>
+                            <th>LF Type</th>
+                            <th>Device Type</th>
+                            <th>Part Number</th>
+                            <th>Handler Type</th>
+                            <th>Elements</th>
+                            <th>File Size</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for kit in handler_kit_data %}
+                        <tr>
+                            <td><strong>{{ kit.filename }}</strong></td>
+                            <td><span class="pkg-badge pkg-{{ kit.pkg_type }}">{{ kit.pkg_type }}</span></td>
+                            <td><span class="lf-badge lf-{{ kit.lf_type }}">{{ kit.lf_type }}</span></td>
+                            <td>{{ kit.device_type }}</td>
+                            <td>{{ kit.part_number }}</td>
+                            <td>
+                                {% if kit.handler_type == 'chamber' %}
+                                    🔧 Chamber
+                                {% else %}
+                                    🔵 Cup
+                                {% endif %}
+                            </td>
+                            <td>{{ kit.element_count }}</td>
+                            <td>{{ kit.file_size_formatted }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% else %}
+            <div class="section text-center">
+                <h3>📦 No Handler Kits Found</h3>
+                <p><strong>Cache Status:</strong> {{ total_kits }} total items in cache</p>
+                <p><strong>Valid Kits:</strong> {{ handler_kit_data|length }} without errors</p>
+                <p>Upload some Handler Kit Excel files to see them in the database.</p>
+                <a href="/" class="btn">Go to Upload Page</a>
+                <a href="/api/metadata/refresh" class="btn btn-warning">🔄 Refresh Cache</a>
+            </div>
+            {% endif %}
+            
+            <div class="summary">
+                <h3>📈 Database Statistics</h3>
+                <p><strong>Total Handler Kits:</strong> {{ total_kits }}</p>
+                <p><strong>Valid Kits:</strong> {{ handler_kit_data|length }}</p>
+                <p><strong>PKG Types:</strong> {{ pkg_stats|length }}</p>
+                <p><strong>LF Types:</strong> {{ lf_stats|length }}</p>
+                <p><strong>Last Updated:</strong> {{ current_time }} UTC+8 by {{ current_user }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('keyup', function() {
+            const searchText = this.value.toLowerCase();
+            const table = document.getElementById('handlerKitTable');
+            const rows = table.getElementsByTagName('tr');
+            
+            let visibleCount = 0;
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const text = row.textContent.toLowerCase();
+                
+                if (text.includes(searchText)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+            
+            console.log(`🔍 Search "${searchText}": ${visibleCount} results found`);
+        });
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📋 Handler Kit Database loaded for HarrisonKuo47');
+            console.log('📅 Current time: 2025-08-28 02:49:08 UTC');
+            console.log('📊 Total kits: {{ total_kits }}');
+            console.log('✅ Valid kits: {{ handler_kit_data|length }}');
+        });
+    </script>
+</body>
+</html>

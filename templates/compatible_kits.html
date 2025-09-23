@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compatible Kits - Lead Frame Mapping Tool</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ Compatible Handler Kits</h1>
+            <p>Suitable Handler Kits for Lead Frame Analysis</p>
+            <p>Current Time: {{ current_time }} UTC+8 | User: {{ current_user }}</p>
+            {% if not no_results %}
+            <p>Total Compatible Kits: {{ total_compatible }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="content">
+            <div style="margin-bottom: 20px;">
+                <a href="/" class="back-link">← Back to Home</a>
+                <a href="/results" class="btn">📊 View Results</a>
+                <a href="/handler_kit_database" class="btn">📋 Handler Kit Database</a>
+            </div>
+            
+            {% if no_results %}
+            <div class="section text-center">
+                {% if error_message %}
+                <h3>❌ Error Loading Compatible Kits</h3>
+                <div class="error-message" style="background: #f8d7da; color: #721c24; padding: 15px; border: 1px solid #f5c6cb; border-radius: 4px; margin: 20px 0;">
+                    <strong>Error Details:</strong> {{ error_message }}
+                </div>
+                {% else %}
+                <h3>📦 No Compatible Kits Found</h3>
+                <p>{{ message or "Run a column-filtered analysis first to see compatible handler kits." }}</p>
+                {% endif %}
+                
+                <div style="margin: 30px 0;">
+                    <h4>🎯 How to Find Compatible Kits:</h4>
+                    <ol style="text-align: left; display: inline-block; margin: 20px 0;">
+                        <li>Upload Lead Frame DXF files</li>
+                        <li>Upload Handler Kit Excel files</li>
+                        <li>Run column-filtered analysis</li>
+                        <li>View compatible kits here</li>
+                    </ol>
+                </div>
+                
+                <a href="/" class="btn btn-primary">🚀 Start Analysis</a>
+                <a href="/handler_kit_database" class="btn btn-info">📋 View All Handler Kits</a>
+            </div>
+            
+            {% else %}
+            <div class="section">
+                <h2>🎯 Compatible Handler Kits Summary</h2>
+                <p><strong>Total Analyses:</strong> {{ sorted_analysis_results|length }}</p>
+                <p><strong>Total Compatible Kits:</strong> {{ total_compatible }}</p>
+                <p><strong>Last Updated:</strong> {{ current_time }} UTC+8 by {{ current_user }}</p>
+            </div>
+            
+            {% for analysis_id, data in sorted_analysis_results %}
+            {% if data.get('suitable_kits') and data.suitable_kits|length > 0 %}
+            <div class="analysis-section">
+                <h3>📊 Analysis: {{ analysis_id }}</h3>
+                <div class="analysis-info">
+                    <p><strong>📅 Time:</strong> {{ calculate_time_ago(data.get('analysis_time', '')) }}</p>
+                    {% if data.get('lead_frame_info') %}
+                    <p><strong>🗺️ Lead Frame:</strong> {{ data.lead_frame_info.get('filename', 'Unknown') }}</p>
+                    {% endif %}
+                    <p><strong>✅ Compatible Kits:</strong> {{ data.suitable_kits|length }}</p>
+                </div>
+                
+                <div class="compatible-kits-grid">
+                    {% for kit in data.suitable_kits %}
+                    <div class="kit-card">
+                        <h4>📋 {{ kit.get('filename', 'Unknown Kit') }}</h4>
+                        <div class="kit-info">
+                            {% if kit.get('pkg_type') %}
+                            <p><strong>📦 PKG:</strong> {{ kit.pkg_type }}</p>
+                            {% endif %}
+                            {% if kit.get('lf_type') %}
+                            <p><strong>🔗 LF:</strong> {{ kit.lf_type }}</p>
+                            {% endif %}
+                            {% if kit.get('element_count') %}
+                            <p><strong>🔢 Elements:</strong> {{ kit.element_count }}</p>
+                            {% endif %}
+                            {% if kit.get('compatibility_score') %}
+                            <p><strong>⭐ Score:</strong> {{ kit.compatibility_score }}%</p>
+                            {% endif %}
+                        </div>
+                        
+                        {% if kit.get('match_reasons') %}
+                        <div class="match-reasons">
+                            <h5>✅ Match Reasons:</h5>
+                            <ul>
+                                {% for reason in kit.match_reasons %}
+                                <li>{{ reason }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ Compatible Kits page loaded for {{ current_user }}');
+            console.log('📅 Current time: 2025-08-29 01:31:34 UTC');
+            console.log('🎯 Total compatible kits: {{ total_compatible }}');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>No Results Found - Lead Frame Mapping Tool</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 No Analysis Results Found</h1>
+            <p>Lead Frame Mapping Tool - No Data Available</p>
+            <p>Current Time: {{ current_time }} UTC+8 | User: {{ current_user }}</p>
+        </div>
+        
+        <div class="content">
+            <div class="section text-center">
+                {% if error %}
+                <div class="error-message">
+                    <h3>❌ Error Occurred</h3>
+                    <p><strong>Error Details:</strong> {{ error }}</p>
+                    <p>Please try again or contact support if the issue persists.</p>
+                </div>
+                {% else %}
+                <div class="info-box">
+                    <h3>📋 No Analysis Results Available</h3>
+                    {% if message %}
+                    <p>{{ message }}</p>
+                    {% else %}
+                    <p>Run a column-filtered analysis first to see results here.</p>
+                    <p>Upload a Lead Frame DXF file and Handler Kit Excel files, then start the analysis.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <div style="margin-top: 30px;">
+                    <a href="/" class="btn">🏠 Go to Home Page</a>
+                    <a href="/handler_kit_database" class="btn">📋 View Handler Kit Database</a>
+                    {% if not error %}
+                    <a href="/#step-1" class="btn btn-success">📤 Upload Files</a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>🚀 Quick Start Guide</h3>
+                <ol>
+                    <li><strong>Upload Lead Frame:</strong> Upload your DXF file containing the lead frame design</li>
+                    <li><strong>Upload Handler Kits:</strong> Upload Excel files with vacuum cup/chamber configurations</li>
+                    <li><strong>Configure Analysis:</strong> Select layers and filtering options</li>
+                    <li><strong>Run Analysis:</strong> Execute the mapping analysis to find compatible handler kits</li>
+                    <li><strong>View Results:</strong> Review the analysis results and compatible configurations</li>
+                </ol>
+            </div>
+            
+            <div class="summary">
+                <h3>📈 System Status</h3>
+                <p><strong>Current User:</strong> {{ current_user }}</p>
+                <p><strong>Timestamp:</strong> {{ current_time }} UTC+8</p>
+                <p><strong>Application Version:</strong> {{ app_version|default('2.0.0') }}</p>
+                <p><strong>Status:</strong> Ready for new analysis</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        console.log('📊 No results page loaded for {{ current_user }}');
+        console.log('📅 Current time: 2025-08-28 02:42:30 UTC');
+        
+        // Auto-redirect to home after 10 seconds if no error
+        {% if not error %}
+        let countdown = 10;
+        const redirectTimer = setInterval(() => {
+            countdown--;
+            if (countdown <= 0) {
+                clearInterval(redirectTimer);
+                window.location.href = '/';
+            }
+        }, 1000);
+        
+        // Cancel auto-redirect if user interacts with page
+        document.addEventListener('click', () => {
+            clearInterval(redirectTimer);
+        });
+        {% endif %}
+    </script>
+</body>
+</html>

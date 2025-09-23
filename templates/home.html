@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Frame Analysis Tool - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .dimension-preset {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            margin: 0.25rem;
+            cursor: pointer;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+        
+        .dimension-preset:hover {
+            background-color: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        
+        .dimension-preset.selected {
+            background-color: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        
+        .help-icon {
+            cursor: help;
+            margin-left: 5px;
+        }
+        
+        .analysis-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .form-section {
+            background-color: #f8f9fa;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .spinner-border-lg {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        .debug-info {
+            background-color: #f1f3f4;
+            border: 1px solid #dadce0;
+            border-radius: 0.25rem;
+            padding: 0.75rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="analysis-header">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="display-4">🔬 Lead Frame Analysis Tool</h1>
+                    <p class="lead">Automated Handler Kit Mapping and Overlap Detection</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-light text-dark">👤 Current User: <strong>HarrisonKuo47</strong></span>
+                        </div>
+                        <div>
+                            <span class="badge bg-light text-dark">📅 <span id="current-time">2025-01-09 01:05:43 UTC</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- File Upload Section -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📁 Lead Frame Upload</h5>
+                        <small class="text-muted">Upload DXF files for analysis</small>
+                    </div>
+                    <div class="card-body">
+                        <form id="leadframe-upload-form" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="leadframe-file" class="form-label">Select Lead Frame (DXF):</label>
+                                <input type="file" class="form-control" id="leadframe-file" name="leadframe" accept=".dxf">
+                                <div class="form-text">Supported format: DXF files</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Upload Lead Frame
+                            </button>
+                        </form>
+                        <div id="leadframe-upload-status" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📋 Handler Kit Upload</h5>
+                        <small class="text-muted">Upload Excel files with vacuum cup/chamber data</small>
+                    </div>
+                    <div class="card-body">
+                        <form id="handlerkit-upload-form" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="handlerkit-files" class="form-label">Select Handler Kits (Excel):</label>
+                                <input type="file" class="form-control" id="handlerkit-files" name="handlerkits" multiple accept=".xlsx,.xls">
+                                <div class="form-text">Supported formats: XLSX, XLS files (multiple selection allowed)</div>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-upload"></i> Upload Handler Kits
+                            </button>
+                        </form>
+                        <div id="handlerkit-upload-status" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Enhanced Analysis Configuration Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">⚙️ Analysis Configuration</h5>
+                        <small class="text-muted">Configure your analysis parameters with custom dimensions</small>
+                    </div>
+                    <div class="card-body">
+                        <form id="analysis-form">
+                            <!-- Lead Frame Selection -->
+                            <div class="mb-3">
+                                <label for="dxf_filename" class="form-label">📁 Select Lead Frame:</label>
+                                <select class="form-select" id="dxf_filename" name="dxf_filename" required>
+                                    <option value="">-- Select Lead Frame --</option>
+                                </select>
+                                <div class="form-text">Choose the DXF file to analyze</div>
+                            </div>
+                            
+                            <!-- Layer Selection -->
+                            <div class="mb-3">
+                                <label for="selected_layers" class="form-label">🎨 Selected Layers:</label>
+                                <input type="text" class="form-control" id="selected_layers" name="selected_layers" 
+                                       placeholder="e.g., 0,SH-01_OBJECT,SH-01_PKG,SH-01_DIM">
+                                <div class="form-text">Comma-separated layer names. Leave empty for default layers.</div>
+                            </div>
+                            
+                            <!-- Filter Options -->
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="pkg_type" class="form-label">📦 Package Type:</label>
+                                    <select class="form-select" id="pkg_type" name="pkg_type">
+                                        <option value="ALL">All Types</option>
+                                        <option value="QFN">QFN</option>
+                                        <option value="QFP">QFP</option>
+                                        <option value="BGA">BGA</option>
+                                        <option value="TSSOP">TSSOP</option>
+                                        <option value="SOIC">SOIC</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="lf_type" class="form-label">🔧 Lead Frame Type:</label>
+                                    <select class="form-select" id="lf_type" name="lf_type">
+                                        <option value="ALL">All Types</option>
+                                        <option value="WLF">WLF</option>
+                                        <option value="HYDE">HYDE</option>
+                                        <option value="SUHD">SUHD</option>
+                                        <option value="RLF">RLF</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="early_termination" class="form-label">⚡ Early Termination:</label>
+                                    <select class="form-select" id="early_termination" name="early_termination">
+                                        <option value="false">Analyze All Kits</option>
+                                        <option value="true">Stop After First Match</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- User Dimension Input Section -->
+                            <div class="form-section">
+                                <label class="form-label"><strong>📏 Ratio Base Dimensions (Required)</strong></label>
+                                <div class="form-text mb-3">
+                                    Enter the width and height for coordinate transformation ratio calculation.
+                                    These values determine how handler kit coordinates are scaled to match your lead frame.
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="user_width" class="form-label">
+                                            <strong>Width (mm):</strong>
+                                            <span class="help-icon" title="Width for ratio calculation">ℹ️</span>
+                                        </label>
+                                        <input type="number" class="form-control" id="user_width" name="user_width" 
+                                               step="0.1" min="10" max="2000" value="270" required>
+                                        <div class="form-text">Range: 10-2000mm (Default: 270mm)</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="user_height" class="form-label">
+                                            <strong>Height (mm):</strong>
+                                            <span class="help-icon" title="Height for ratio calculation">ℹ️</span>
+                                        </label>
+                                        <input type="number" class="form-control" id="user_height" name="user_height" 
+                                               step="0.1" min="10" max="2000" value="90" required>
+                                        <div class="form-text">Range: 10-2000mm (Default: 90mm)</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Quick Preset Buttons -->
+                                <div class="mt-3">
+                                    <small class="form-label"><strong>Quick Presets:</strong></small><br>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dimension-preset" 
+                                            onclick="setDimensions(270, 90)">270×90 (Standard)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dimension-preset" 
+                                            onclick="setDimensions(300, 95)">300×95 (Custom)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dimension-preset" 
+                                            onclick="setDimensions(600, 190)">600×190 (16DW)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dimension-preset" 
+                                            onclick="setDimensions(400, 150)">400×150 (Medium)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dimension-preset" 
+                                            onclick="setDimensions(800, 250)">800×250 (Large)</button>
+                                </div>
+                                
+                                <!-- Real-time validation feedback -->
+                                <div id="dimension_feedback" class="mt-3" style="display: none;">
+                                    <div class="alert alert-info mb-0">
+                                        <strong>📊 Preview:</strong> <span id="dimension_preview_text"></span>
+                                    </div>
+                                </div>
+                                
+                                <div id="dimension_warning" class="mt-3" style="display: none;">
+                                    <div class="alert alert-warning mb-0">
+                                        <strong>⚠️ Warning:</strong> <span id="dimension_warning_text"></span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Debug Information -->
+                                <div id="dimension_debug" class="mt-3" style="display: none;">
+                                    <div class="debug-info">
+                                        <strong>🔍 Debug Info:</strong>
+                                        <div>Current Width: <span id="debug_width">--</span></div>
+                                        <div>Current Height: <span id="debug_height">--</span></div>
+                                        <div>Form Data: <span id="debug_form_data">--</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Analysis Button -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="button" class="btn btn-secondary me-md-2" id="reset-form-btn">
+                                    🔄 Reset Form
+                                </button>
+                                <button type="button" class="btn btn-info me-md-2" id="debug-toggle-btn">
+                                    🔍 Toggle Debug
+                                </button>
+                                <button type="submit" class="btn btn-primary btn-lg" id="run-analysis-btn">
+                                    🚀 Run Analysis with Custom Dimensions
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📊 Analysis Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="analysis-results">
+                            <p class="text-muted">No analysis results yet. Configure and run an analysis above.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Enhanced JavaScript with debugging for direct user input
+        const currentUser = 'HarrisonKuo47';
+        const currentTime = '2025-01-09 01:05:43';
+        let debugMode = false;
+        
+        // Update current time display
+        document.getElementById('current-time').textContent = currentTime + ' UTC';
+        
+        // Debug functions
+        function updateDebugInfo() {
+            if (debugMode) {
+                const width = document.getElementById('user_width').value;
+                const height = document.getElementById('user_height').value;
+                
+                document.getElementById('debug_width').textContent = width || '--';
+                document.getElementById('debug_height').textContent = height || '--';
+                
+                const formData = new FormData(document.getElementById('analysis-form'));
+                const formDataObj = {};
+                for (let [key, value] of formData.entries()) {
+                    formDataObj[key] = value;
+                }
+                document.getElementById('debug_form_data').textContent = JSON.stringify(formDataObj, null, 2);
+                
+                console.log('🔍 [DEBUG] Current form values:', formDataObj);
+            }
+        }
+        
+        // Toggle debug mode
+        document.getElementById('debug-toggle-btn').addEventListener('click', function() {
+            debugMode = !debugMode;
+            const debugDiv = document.getElementById('dimension_debug');
+            debugDiv.style.display = debugMode ? 'block' : 'none';
+            this.textContent = debugMode ? '🔍 Hide Debug' : '🔍 Show Debug';
+            
+            if (debugMode) {
+                updateDebugInfo();
+                console.log('🔍 [DEBUG] Debug mode enabled');
+            }
+        });
+        
+        // Dimension preset functions
+        function setDimensions(width, height) {
+            console.log(`🔍 [DEBUG] Setting dimensions: ${width} x ${height}`);
+            
+            document.getElementById('user_width').value = width;
+            document.getElementById('user_height').value = height;
+            
+            // Clear all preset selections
+            document.querySelectorAll('.dimension-preset').forEach(p => p.classList.remove('selected'));
+            
+            // Find and highlight the clicked preset
+            const presets = document.querySelectorAll('.dimension-preset');
+            presets.forEach(preset => {
+                if (preset.onclick && preset.onclick.toString().includes(`${width}, ${height}`)) {
+                    preset.classList.add('selected');
+                }
+            });
+            
+            validateAndPreviewDimensions();
+            updateDebugInfo();
+        }
+
+        function validateAndPreviewDimensions() {
+            const width = parseFloat(document.getElementById('user_width').value);
+            const height = parseFloat(document.getElementById('user_height').value);
+            const feedback = document.getElementById('dimension_feedback');
+            const warning = document.getElementById('dimension_warning');
+            const previewText = document.getElementById('dimension_preview_text');
+            const warningText = document.getElementById('dimension_warning_text');
+            
+            console.log(`🔍 [DEBUG] Validating dimensions: width=${width}, height=${height}`);
+            
+            // Validation
+            let warnings = [];
+            let isValid = true;
+            
+            if (isNaN(width) || isNaN(height)) {
+                isValid = false;
+                warnings.push('Dimensions must be valid numbers');
+            } else if (width <= 0 || height <= 0) {
+                warnings.push('Dimensions must be positive');
+                isValid = false;
+            } else if (width < 10 || height < 10) {
+                warnings.push('Dimensions should be at least 10mm');
+            } else if (width > 2000 || height > 2000) {
+                warnings.push('Very large dimensions detected');
+            } else {
+                const aspectRatio = Math.max(width, height) / Math.min(width, height);
+                if (aspectRatio > 10) {
+                    warnings.push(`Unusual aspect ratio (${aspectRatio.toFixed(1)}:1)`);
+                }
+            }
+            
+            // Show preview
+            if (isValid && !isNaN(width) && !isNaN(height)) {
+                const area = (width * height / 1000).toFixed(1);
+                previewText.textContent = `${width} × ${height} mm (Area: ${area} cm²)`;
+                feedback.style.display = 'block';
+            } else {
+                feedback.style.display = 'none';
+            }
+            
+            // Show warnings
+            if (warnings.length > 0) {
+                warningText.textContent = warnings.join(', ');
+                warning.style.display = 'block';
+            } else {
+                warning.style.display = 'none';
+            }
+            
+            console.log(`🔍 [DEBUG] Validation result: isValid=${isValid}, warnings=${warnings.length}`);
+            return isValid && warnings.length === 0;
+        }
+
+        function clearPresetSelection() {
+            document.querySelectorAll('.dimension-preset').forEach(p => p.classList.remove('selected'));
+        }
+
+        // Add event listeners
+        document.getElementById('user_width').addEventListener('input', function() {
+            console.log('🔍 [DEBUG] Width input changed:', this.value);
+            validateAndPreviewDimensions();
+            clearPresetSelection();
+            updateDebugInfo();
+        });
+
+        document.getElementById('user_height').addEventListener('input', function() {
+            console.log('🔍 [DEBUG] Height input changed:', this.value);
+            validateAndPreviewDimensions();
+            clearPresetSelection();
+            updateDebugInfo();
+        });
+
+        // Reset Form Functionality
+        document.getElementById('reset-form-btn').addEventListener('click', function() {
+            console.log('🔍 [DEBUG] Resetting form');
+            document.getElementById('analysis-form').reset();
+            document.getElementById('user_width').value = '270';
+            document.getElementById('user_height').value = '90';
+            validateAndPreviewDimensions();
+            clearPresetSelection();
+            updateDebugInfo();
+        });
+
+        // FIXED: Enhanced form submission with proper FormData handling
+        document.getElementById('analysis-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            console.log('🚀 [DEBUG] Form submission started');
+            
+            const runButton = document.getElementById('run-analysis-btn');
+            
+            // Get form values explicitly (CRITICAL FIX)
+            const dxfFilename = document.getElementById('dxf_filename').value;
+            const selectedLayers = document.getElementById('selected_layers').value;
+            const pkgType = document.getElementById('pkg_type').value;
+            const lfType = document.getElementById('lf_type').value;
+            const earlyTermination = document.getElementById('early_termination').value;
+            const userWidth = parseFloat(document.getElementById('user_width').value);
+            const userHeight = parseFloat(document.getElementById('user_height').value);
+            
+            console.log('🔍 [DEBUG] Form values extracted:');
+            console.log('  📁 DXF Filename:', dxfFilename);
+            console.log('  🎨 Selected Layers:', selectedLayers);
+            console.log('  📦 PKG Type:', pkgType);
+            console.log('  🔧 LF Type:', lfType);
+            console.log('  ⚡ Early Termination:', earlyTermination);
+            console.log('  📏 User Width:', userWidth);
+            console.log('  📏 User Height:', userHeight);
+            
+            // Validate required fields
+            if (!dxfFilename) {
+                alert('Please select a Lead Frame file first.');
+                return;
+            }
+            
+            // Validate dimensions (CRITICAL FIX)
+            if (isNaN(userWidth) || isNaN(userHeight) || userWidth <= 0 || userHeight <= 0) {
+                alert('Please enter valid positive numbers for width and height.');
+                return;
+            }
+            
+            if (!validateAndPreviewDimensions()) {
+                alert('Please enter valid width and height dimensions.');
+                return;
+            }
+            
+            // Create FormData explicitly (CRITICAL FIX)
+            const formData = new FormData();
+            formData.append('dxf_filename', dxfFilename);
+            formData.append('selected_layers', selectedLayers);
+            formData.append('pkg_type', pkgType);
+            formData.append('lf_type', lfType);
+            formData.append('early_termination', earlyTermination);
+            formData.append('user_width', userWidth.toString());  // CRITICAL: Convert to string
+            formData.append('user_height', userHeight.toString()); // CRITICAL: Convert to string
+            
+            // Debug: Log FormData contents
+            console.log('🔍 [DEBUG] FormData contents:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}: ${value} (type: ${typeof value})`);
+            }
+            
+            // Update button state
+            runButton.disabled = true;
+            runButton.innerHTML = '🔄 Running Analysis with Custom Dimensions...';
+            
+            // Show loading with current dimensions
+            document.getElementById('analysis-results').innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary spinner-border-lg" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="mt-3">Running analysis with dimensions: ${userWidth} × ${userHeight} mm</h5>
+                    <p class="text-muted">👤 Analysis by: ${currentUser} | 📅 ${currentTime}</p>
+                    <div class="mt-2">
+                        <small class="text-info">🔍 Debug: Sending width=${userWidth}, height=${userHeight}</small>
+                    </div>
+                </div>
+            `;
+            
+            // Submit to enhanced endpoint (CRITICAL FIX)
+            fetch('/api/run_analysis_with_user_dimensions', {
+                method: 'POST',
+                body: formData  // Send FormData directly
+            })
+            .then(response => {
+                console.log('🔍 [DEBUG] Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('🔍 [DEBUG] Response data:', data);
+                if (data.status === 'success') {
+                    displayEnhancedResults(data);
+                } else {
+                    throw new Error(data.detail || 'Analysis failed');
+                }
+            })
+            .catch(error => {
+                console.error('❌ [DEBUG] Analysis error:', error);
+                document.getElementById('analysis-results').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><strong>❌ Analysis Failed</strong></h6>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <small>👤 User: ${currentUser} | 📅 ${currentTime}</small>
+                        <hr>
+                        <small><strong>Debug Info:</strong><br>
+                        Attempted Width: ${userWidth}<br>
+                        Attempted Height: ${userHeight}<br>
+                        Endpoint: /api/run_analysis_with_user_dimensions</small>
+                    </div>
+                `;
+            })
+            .finally(() => {
+                // Reset button state
+                runButton.disabled = false;
+                runButton.innerHTML = '🚀 Run Analysis with Custom Dimensions';
+            });
+        });
+
+        function displayEnhancedResults(data) {
+            console.log('📊 [DEBUG] Displaying results:', data);
+            
+            const resultsDiv = document.getElementById('analysis-results');
+            const userDims = data.user_dimensions;
+            const transformSummary = data.transformation_summary;
+            
+            let resultsHTML = `
+                <div class="alert alert-success">
+                    <h6><strong>✅ Analysis Completed with User Dimensions</strong></h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>📁 Lead Frame:</strong> ${data.leadframe}<br>
+                            <strong>📏 User Dimensions:</strong> ${userDims.width}×${userDims.height}mm<br>
+                            <strong>🔧 Width Ratio:</strong> ${transformSummary.transformation_ratios.width_ratio.toFixed(3)}<br>
+                            <strong>🔧 Height Ratio:</strong> ${transformSummary.transformation_ratios.height_ratio.toFixed(3)}<br>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>⏱️ Total Time:</strong> ${data.performance_summary.total_time}s<br>
+                            <strong>🎯 Suitable Kits:</strong> ${data.suitable_kits_found}<br>
+                            <strong>🎨 Layers:</strong> ${data.selected_layers.join(', ')}<br>
+                            <strong>👤 Analyzed by:</strong> ${currentUser}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            if (data.suitable_kits_found > 0) {
+                resultsHTML += `
+                    <h6>🎯 Suitable Handler Kits Found:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Handler Kit</th>
+                                    <th>Type</th>
+                                    <th>PKG Type</th>
+                                    <th>LF Type</th>
+                                    <th>Elements</th>
+                                    <th>Dimensions Used</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.suitable_kits.forEach(kit => {
+                    resultsHTML += `
+                        <tr>
+                            <td><strong>${kit.name}</strong></td>
+                            <td><span class="badge bg-primary">${kit.handler_type}</span></td>
+                            <td><span class="badge bg-secondary">${kit.pkg_type}</span></td>
+                            <td><span class="badge bg-secondary">${kit.lf_type}</span></td>
+                            <td>${kit.total_elements}</td>
+                            <td><small class="text-success">${kit.user_dimensions_used || userDims.width + 'x' + userDims.height + 'mm'}</small></td>
+                        </tr>
+                    `;
+                });
+                
+                resultsHTML += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                resultsHTML += `
+                    <div class="alert alert-warning">
+                        <strong>⚠️ No Suitable Handler Kits Found</strong><br>
+                        <small>Try adjusting the filtering criteria or dimensions. Current dimensions used: ${userDims.width}×${userDims.height}mm</small>
+                    </div>
+                `;
+            }
+            
+            if (data.view_results_url) {
+                resultsHTML += `
+                    <div class="mt-3">
+                        <a href="${data.view_results_url}" class="btn btn-info" target="_blank">
+                            📊 View Detailed Results
+                        </a>
+                    </div>
+                `;
+            }
+            
+            // Add debug info if debug mode is on
+            if (debugMode) {
+                resultsHTML += `
+                    <div class="mt-3">
+                        <div class="debug-info">
+                            <strong>🔍 Debug - Server Response:</strong><br>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = resultsHTML;
+        }
+
+        // Load available lead frames on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 [DEBUG] Page loaded, initializing...');
+            loadAvailableLeadFrames();
+            validateAndPreviewDimensions();
+        });
+
+        function loadAvailableLeadFrames() {
+            console.log('🔍 [DEBUG] Loading available lead frames...');
+            fetch('/api/get_available_leadframes')
+            .then(response => response.json())
+            .then(data => {
+                console.log('🔍 [DEBUG] Lead frames loaded:', data);
+                const select = document.getElementById('dxf_filename');
+                select.innerHTML = '<option value="">-- Select Lead Frame --</option>';
+                
+                if (data.leadframes && data.leadframes.length > 0) {
+                    data.leadframes.forEach(lf => {
+                        const option = document.createElement('option');
+                        option.value = lf;
+                        option.textContent = lf;
+                        select.appendChild(option);
+                    });
+                    console.log(`✅ [DEBUG] Added ${data.leadframes.length} lead frames to dropdown`);
+                } else {
+                    console.log('⚠️ [DEBUG] No lead frames found');
+                }
+            })
+            .catch(error => {
+                console.error('❌ [DEBUG] Failed to load lead frames:', error);
+                document.getElementById('dxf_filename').innerHTML = '<option value="">-- Error loading files --</option>';
+            });
+        }
+        
+        // Initialize on page load
+        console.log('🚀 [DEBUG] JavaScript initialized for user:', currentUser);
+    </script>
+</body>
+</html>
