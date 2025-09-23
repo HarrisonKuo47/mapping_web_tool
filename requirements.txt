@@ -1,0 +1,50 @@
+# -------------------------------
+# Core numeric + image processing
+# -------------------------------
+numpy>=1.26
+opencv-python-headless>=4.10.0.84
+scipy>=1.11           # optional but useful for image ops if needed
+
+# -------------------------------
+# Plotting and rendering
+# -------------------------------
+matplotlib>=3.8
+pillow>=10.3          # image IO backend used by matplotlib
+
+# -------------------------------
+# DXF parsing and rendering
+# -------------------------------
+ezdxf>=1.3.2          # addons.drawing used for MatplotlibBackend
+
+# -------------------------------
+# Data handling (Excel IO)
+# -------------------------------
+pandas>=2.2
+openpyxl>=3.1.2
+# xlrd>=2.0.1          # only if you must read legacy .xls files
+
+# -------------------------------
+# Web API (FastAPI + server)
+# -------------------------------
+fastapi>=0.112
+uvicorn[standard]>=0.30
+jinja2>=3.1.2
+python-multipart>=0.0.9
+aiofiles>=23.2.1      # recommended for serving static files with FastAPI
+
+# Optional JSON performance boosters for FastAPI
+orjson>=3.10.0        # FastAPI can auto-use orjson if installed
+
+# -------------------------------
+# Configuration helpers (optional)
+# -------------------------------
+pydantic>=2.8
+pydantic-settings>=2.4  # if your config.settings uses Pydantic Settings
+
+# -------------------------------
+# Developer tooling (optional)
+# -------------------------------
+# black>=24.4.2
+# ruff>=0.5.4
+# pytest>=8.2.0
+# pip-tools>=7.4.1

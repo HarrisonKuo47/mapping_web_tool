@@ -1,0 +1,221 @@
+# Design Rule Checker and Vacuum Scanner
+
+This project provides:
+- Automated overlap detection between vacuum cups and DXF leadframe features.
+- A scanning engine that finds valid vacuum cup positions (no overlap), including a “critical fix” mode that selects the optimal Y coordinate to scan where geometry actually exists.
+- Visualizations for DXF layers, masks, scan lines, overlap diagnostics, and summary panels.
+- FastAPI routes for a simple web interface and batch operations.
+
+---
+
+## Key Modules
+
+- `design_rule/contour_check.py`
+  - Central configuration (`DESIGN_RULES`)
+  - High-level checks that call the vacuum scanner module
+- `design_rule/vacuum_scanner.py`
+  - DXF → mask rendering (high-DPI)
+  - Overlap detection with pixel-accurate masks
+  - “Optimal Y” scanning (critical fix)
+  - Comprehensive matplotlib visualization panels
+- `plot_vacuum_overlap.py`
+  - Reference function used to validate the overlap logic and visualization (circles/ovals)
+- Utilities (examples)
+  - `convert_coordinates.py` / `create_vacuum_mask.py` (coordinate transform and mask creation utilities)
+
+---
+
+## Requirements
+
+- Python 3.9+ recommended
+- Install dependencies:
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+---
+
+## Project Configuration
+
+The default design rules live in `design_rule/contour_check.py`:
+
+```python
+DESIGN_RULES = {
+  "length_width_rules": { ... },
+  "vacuum_position_rules": {
+    "vacuum_diameter_mm": 2.6,         # <- Vacuum cup diameter here
+    "default_positions_per_side": 10,
+    "scan_unit_mm": 0.1,
+    "min_positions_per_side": 5,
+    "max_positions_per_side": 20,
+    "resolution_dpi": 300
+  }
+}
+```
+
+If you want a different vacuum size, update `vacuum_diameter_mm` here. The scanner uses this value to build pixel-accurate masks.
+
+---
+
+## Expected Folder Structure
+
+Your upload directory (configured in your app’s settings, often `settings.UPLOAD_DIR`) should contain:
+
+```
+UPLOAD_DIR/
+├─ leadframes/                # Place your .dxf files here
+│   └─ YOUR_LEADFRAME.dxf
+├─ layers/
+│   └─ layer.txt              # One DXF layer name per line to render/check
+└─ temp_analysis/
+    └─ <leadframe_folder>/
+        ├─ <leadframe_folder>_boundary.xlsx   # Boundary with Item/Value pairs:
+        │   # Required keys: x_min, x_max, y_min, y_max
+        │   Item,Value
+        │   x_min, ...
+        │   x_max, ...
+        │   y_min, ...
+        │   y_max, ...
+        └─ <leadframe_folder>_shapes_summary.xlsx  # Optional (counts/metadata)
+```
+
+Notes:
+- `layer.txt` controls which DXF layers are visible/checked.
+- Boundary Excel must contain at least: `x_min`, `x_max`, `y_min`, `y_max`.
+
+---
+
+## How to Run the Vacuum Scanner Programmatically
+
+Here’s a minimal example:
+
+```python
+from design_rule.vacuum_scanner import run_vacuum_position_scan
+
+boundary_data = {
+    "x_min": 0.0, "x_max": 600.0,
+    "y_min": 0.0, "y_max": 190.0
+}
+
+result = run_vacuum_position_scan(
+    dxf_file_path="path/to/UPLOAD_DIR/leadframes/YOUR_LEADFRAME.dxf",
+    layer_names_file="path/to/UPLOAD_DIR/layers/layer.txt",
+    boundary_data=boundary_data,
+    adjustment_factor=0.5,               # Scale factor (example: 1:2 downscale)
+    vacuum_diameter_mm=2.6,              # From DESIGN_RULES by default
+    required_positions=10,
+    scan_unit_mm=0.1,
+    resolution_dpi=300
+)
+
+print(result["scan_result"]["status"])
+print("Positions found:", result["scan_result"]["positions_found"])
+```
+
+What it does:
+- Renders the DXF to a high-DPI image and builds a binary mask.
+- Finds the optimal scan Y (row with most geometry) and scans from upper-right → upper-left.
+- Builds a pixel mask for the vacuum circle using `vacuum_diameter_mm` and checks overlap.
+- Displays a multi-panel matplotlib visualization (DXF, mask, coverage-by-Y, overlap analysis, summary).
+
+---
+
+## Running the Web Interface (FastAPI)
+
+If you already have a FastAPI application that imports `design_rule.design_rule_routes`, start it with:
+
+```bash
+uvicorn your_app_module:app --reload
+```
+
+Then open:
+- `http://127.0.0.1:8000/design_rule_checker` – Main checker page
+- `http://127.0.0.1:8000/design_rules_summary` – Summary page
+
+If you don’t have a main app yet, here’s a minimal example:
+
+```python
+# main.py
+from fastapi import FastAPI
+from design_rule.design_rule_routes import router as design_rule_router
+
+app = FastAPI()
+app.include_router(design_rule_router)
+```
+
+Run:
+```bash
+uvicorn main:app --reload
+```
+
+---
+
+## Visualization Outputs
+
+The scanner shows a 5-panel figure:
+1. DXF + valid vacuum positions and sample rejections
+2. Binary mask of DXF (used for overlap)
+3. Y-coverage plot (used to pick the optimal scan Y)
+4. Overlap pixel counts vs X (tolerance line shown)
+5. Summary pane (parameters, coverage, counts, status)
+
+Debug assets (if enabled by your code version) may also be saved to:
+- `debug_vacuum_scanner/` – DXF render, mask, and local overlap regions
+
+---
+
+## Verifying Vacuum Mask Size (2.6 mm)
+
+- The vacuum mask radius (in pixels) is computed from canvas DPI and world limits:
+  - `pixels_per_mm ≈ canvas_width_px / (x_max - x_min)`
+  - `radius_px = round((vacuum_diameter_mm / 2) * pixels_per_mm)`
+- If your circles look too small/large:
+  - Ensure `ax.set_aspect('equal')` is used during DXF rendering.
+  - Confirm boundary `x_min/x_max/y_min/y_max` match the actual drawing extents.
+  - Increase `resolution_dpi` if the mask appears blocky.
+
+---
+
+## Troubleshooting
+
+- “No overlaps detected but visually overlapping”
+  - Verify `layer.txt` includes the geometry layers you expect.
+  - Check the mask coverage in the visualization (Panel 2).
+  - Ensure `overlap_tolerance_pixels=0` for strict detection.
+  - Increase DPI (e.g., 400) to reduce aliasing.
+
+- “DXF doesn’t render”
+  - Confirm the DXF file is valid and supported by `ezdxf`.
+  - Try enabling fewer layers first.
+
+- “Excel read/write errors”
+  - Confirm files are `.xlsx` and `openpyxl` is installed.
+  - Check that the `boundary.xlsx` has required keys.
+
+---
+
+## Development
+
+- Create a new environment and install dependencies via `requirements.txt`.
+- Code style: standard Python with type hints where convenient.
+- Main external libs: `ezdxf`, `matplotlib`, `opencv-python-headless`, `pandas`, `fastapi`.
+
+---
+
+## License
+
+Internal project. Add your license information here.
+
+---
+
+## Credits
+
+Authored and maintained by: `HarrisonKuo47`  
+DXF rendering via [ezdxf](https://github.com/mozman/ezdxf)  
+Web API via [FastAPI](https://fastapi.tiangolo.com/)
