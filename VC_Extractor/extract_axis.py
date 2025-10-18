@@ -1,141 +1,302 @@
-import cv2
-import pytesseract
-import numpy as np
-import re
 import os
+import cv2
+import numpy as np
+import pytesseract
+from typing import Dict, List, Tuple, Any, Optional
+from pdf2image import convert_from_path
+from PIL import Image
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+def _set_tesseract_cmd_from_env():
+    cmd = os.environ.get("TESSERACT_CMD")
+    if cmd:
+        pytesseract.pytesseract.tesseract_cmd = cmd
 
-def extract_axis_labels_by_contours(image_path, rotate_angle=0, axis='x', params=None):
-    if params is None:
-        params = {}
-    
-    img = cv2.imread(image_path)
+def load_image(path: str) -> np.ndarray:
+    img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
+        raise FileNotFoundError(f"Cannot read image: {path}")
+    return img
+
+def _resize_for_dpi(img: np.ndarray, scale: float) -> np.ndarray:
+    if scale is None or abs(scale - 1.0) < 1e-3:
+        return img
+    h, w = img.shape[:2]
+    return cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+
+def _deskew(img_gray: np.ndarray) -> Tuple[np.ndarray, float]:
+    # Estimate skew using Hough line transform on edges
+    edges = cv2.Canny(img_gray, 50, 150, apertureSize=3)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180.0, threshold=200)
+    if lines is None or len(lines) == 0:
+        return img_gray, 0.0
+
+    angles = []
+    for rho, theta in lines[:, 0]:
+        angle = (theta * 180.0 / np.pi) - 90.0
+        # Normalize angle to [-45, 45] to avoid vertical bias
+        if angle < -45:
+            angle += 90
+        elif angle > 45:
+            angle -= 90
+        angles.append(angle)
+
+    if not angles:
+        return img_gray, 0.0
+
+    median_angle = float(np.median(angles))
+    if abs(median_angle) < 0.5:
+        return img_gray, 0.0
+
+    h, w = img_gray.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+    rotated = cv2.warpAffine(img_gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return rotated, median_angle
+
+def _remove_long_lines(bin_img: np.ndarray, line_kernel_scale: float = 0.02) -> np.ndarray:
+    # bin_img is expected to be 0/255 (text=white on black bg after threshold inversion)
+    h, w = bin_img.shape[:2]
+    # Horizontal lines
+    hor_kernel_len = max(10, int(w * line_kernel_scale))
+    hor_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (hor_kernel_len, 1))
+    # Vertical lines
+    ver_kernel_len = max(10, int(h * line_kernel_scale))
+    ver_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, ver_kernel_len))
+
+    remove_h = cv2.morphologyEx(bin_img, cv2.MORPH_OPEN, hor_kernel, iterations=1)
+    remove_v = cv2.morphologyEx(bin_img, cv2.MORPH_OPEN, ver_kernel, iterations=1)
+
+    lines = cv2.bitwise_or(remove_h, remove_v)
+    cleaned = cv2.subtract(bin_img, lines)
+    return cleaned
+
+def preprocess(
+    img_bgr: np.ndarray,
+    threshold_mode: str = "otsu",
+    dpi_boost: float = 1.0,
+    remove_lines: bool = True,
+    deskew: bool = False,
+    line_kernel_scale: float = 0.02,
+) -> Tuple[np.ndarray, Dict[str, Any]]:
+    # 1) scale
+    img = _resize_for_dpi(img_bgr, dpi_boost)
+
+    # 2) grayscale + denoise
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Preserve edges while denoising
+    gray = cv2.bilateralFilter(gray, d=7, sigmaColor=50, sigmaSpace=50)
+
+    # 3) (optional) deskew
+    angle = 0.0
+    if deskew:
+        gray, angle = _deskew(gray)
+
+    # 4) thresholding
+    if threshold_mode == "adaptive":
+        th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 35, 15)
+    else:
+        # Otsu
+        _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Invert so that text is white on black (better for line removal subtract)
+    th_inv = 255 - th
+
+    # 5) remove long lines (dimension lines, gridlines)
+    if remove_lines:
+        th_inv = _remove_long_lines(th_inv, line_kernel_scale=line_kernel_scale)
+
+    # Optional light morphology close to connect broken strokes
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    th_inv = cv2.morphologyEx(th_inv, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    # Back to normal white background for Tesseract (black text)
+    prepped = 255 - th_inv
+    return prepped, {"deskew_angle": angle, "scale": dpi_boost}
+
+def _rotate_image_keep_size(img: np.ndarray, angle: int) -> np.ndarray:
+    angle = angle % 360
+    if angle == 0:
+        return img
+    if angle == 90:
+        return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    if angle == 180:
+        return cv2.rotate(img, cv2.ROTATE_180)
+    if angle == 270:
+        return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    # Fallback arbitrary angle (shouldn't happen here)
+    h, w = img.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    return cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+def _remap_bbox_from_rotated(bbox: Tuple[int, int, int, int], angle: int, orig_w: int, orig_h: int) -> Tuple[int, int, int, int]:
+    # bbox: (x, y, w, h) in rotated image coordinate
+    x, y, w, h = bbox
+    angle = angle % 360
+    if angle == 0:
+        return x, y, w, h
+    if angle == 90:
+        # Rotated clockwise: (x',y') -> (orig_x, orig_y) = (orig_w - (y+h), x)
+        new_x = orig_w - (y + h)
+        new_y = x
+        return new_x, new_y, h, w
+    if angle == 180:
+        new_x = orig_w - (x + w)
+        new_y = orig_h - (y + h)
+        return new_x, new_y, w, h
+    if angle == 270:
+        # Rotated counter-clockwise when mapping back from 90CCW equivalent
+        new_x = y
+        new_y = orig_h - (x + w)
+        return new_x, new_y, h, w
+    # For arbitrary angles, skip remap (not used here)
+    return x, y, w, h
+
+def _parse_tesseract_data(data: str) -> List[Dict[str, Any]]:
+    # Parse TSV returned by image_to_data
+    lines = data.strip().splitlines()
+    if not lines:
         return []
-
-    # --- 關鍵參數讀取 ---
-    ADAPTIVE_BLOCK_SIZE = params.get('block', 31)
-    ADAPTIVE_C_VALUE = params.get('c', 10)
-    MORPH_KERNEL_W = params.get('k_w', 0)
-    MORPH_KERNEL_H = params.get('k_h', 0)
-    
-    # 輪廓過濾參數
-    MIN_H, MAX_H = params.get('h_range', (15, 50))
-    MIN_W, MAX_W = params.get('w_range', (20, 300))
-    MIN_AR, MAX_AR = params.get('ar_range', (1.0, 10.0))
-
-    if ADAPTIVE_BLOCK_SIZE % 2 == 0:
-        ADAPTIVE_BLOCK_SIZE += 1
-
-    # --- 流程 ---
-    img_rotated = cv2.rotate(img, {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}.get(rotate_angle, None)) if rotate_angle != 0 else img
-    gray = cv2.cvtColor(img_rotated, cv2.COLOR_BGR2GRAY)
-    
-    binary_for_contour = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV, ADAPTIVE_BLOCK_SIZE, ADAPTIVE_C_VALUE
-    )
-
-    if MORPH_KERNEL_W > 0 and MORPH_KERNEL_H > 0:
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (MORPH_KERNEL_W, MORPH_KERNEL_H))
-        binary_for_contour = cv2.morphologyEx(binary_for_contour, cv2.MORPH_CLOSE, kernel)
-    
-    debug_contour_input_path = f'debug_contour_input_{axis}.png'
-    cv2.imwrite(debug_contour_input_path, binary_for_contour)
-    print(f"軸 [{axis}]: 二值圖已儲存: {debug_contour_input_path}")
-
-    contours, _ = cv2.findContours(binary_for_contour, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    print(f"軸 [{axis}]: 找到 {len(contours)} 個初始輪廓。")
-
-    results = []
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        aspect_ratio = w / h if h > 0 else 0
-
-        if not (MIN_H < h < MAX_H and MIN_W < w < MAX_W and MIN_AR < aspect_ratio < MAX_AR):
+    header = lines[0].split("\t")
+    idx_map = {name: i for i, name in enumerate(header)}
+    out = []
+    for line in lines[1:]:
+        parts = line.split("\t")
+        if len(parts) != len(header):
             continue
-        
-        roi = gray[y:y+h, x:x+w]
-        raw_text = pytesseract.image_to_string(
-            roi, config='--psm 7 -c tessedit_char_whitelist=0123456789.,+-±'
-        ).strip()
-        
-        value = None
-        m_full = re.match(r'^(\d{1,4}[.,]\d{1,3})', raw_text)
-        m_simple = re.match(r'^(\d{1,4}[.,]?\d{1,3})', raw_text)
-        
-        if m_full: value = m_full.group(1)
-        elif m_simple: value = m_simple.group(1)
-        
-        if value:
-            results.append({'value': value, 'x': x + w // 2, 'y': y + h // 2, 'rot': rotate_angle})
+        try:
+            text = parts[idx_map["text"]].strip()
+            conf = int(float(parts[idx_map["conf"]]))
+            left = int(parts[idx_map["left"]])
+            top = int(parts[idx_map["top"]])
+            width = int(parts[idx_map["width"]])
+            height = int(parts[idx_map["height"]])
+        except Exception:
+            continue
+        out.append({
+            "text": text,
+            "conf": conf,
+            "bbox": (left, top, width, height),
+        })
+    return out
+
+def _is_numeric_text(s: str) -> bool:
+    if not s:
+        return False
+    # Keep nums with optional +/-, decimal, slash (for fractions), and spaces trimmed away
+    allowed = set("0123456789+-. /")
+    return all(ch in allowed for ch in s)
+
+def ocr_digits(
+    img_bgr: np.ndarray,
+    rotations: List[int] = [0, 90, 180, 270],
+    min_conf: int = 55,
+    tesseract_psm: int = 6,
+    whitelist: str = "0123456789+-./",
+    threshold_mode: str = "otsu",
+    dpi_boost: float = 1.0,
+    remove_lines: bool = True,
+    deskew: bool = False,
+    line_kernel_scale: float = 0.02,
+    verbose: bool = False,
+) -> List[Dict[str, Any]]:
+    _set_tesseract_cmd_from_env()
+
+    prepped, meta = preprocess(
+        img_bgr,
+        threshold_mode=threshold_mode,
+        dpi_boost=dpi_boost,
+        remove_lines=remove_lines,
+        deskew=deskew,
+        line_kernel_scale=line_kernel_scale,
+    )
+    H, W = prepped.shape[:2]
+    results = []
+
+    for angle in rotations:
+        rotated = _rotate_image_keep_size(prepped, angle)
+        config = f"--oem 3 --psm {tesseract_psm} -c tessedit_char_whitelist={whitelist}"
+        data = pytesseract.image_to_data(rotated, output_type=pytesseract.Output.STRING, config=config, lang="eng")
+        entries = _parse_tesseract_data(data)
+
+        dets = []
+        for e in entries:
+            text = e["text"].strip()
+            conf = e["conf"]
+            if conf < min_conf:
+                continue
+            if not _is_numeric_text(text):
+                continue
+            # Normalize whitespace and leading/trailing punctuation
+            norm = text.replace(" ", "")
+            # Discard if empty or just punctuation
+            if not any(ch.isdigit() for ch in norm):
+                continue
+
+            x, y, w, h = e["bbox"]
+            # map bbox back to original orientation
+            bx, by, bw, bh = _remap_bbox_from_rotated((x, y, w, h), angle, W, H)
+            dets.append({
+                "text": norm,
+                "conf": conf,
+                "bbox": [int(bx), int(by), int(bw), int(bh)],
+            })
+            if verbose:
+                print(f"[angle={angle}] '{norm}' conf={conf} bbox={bx,by,bw,bh}")
+
+        if dets:
+            results.append({
+                "rotation": angle,
+                "deskew_angle": meta.get("deskew_angle", 0.0),
+                "scale": meta.get("scale", 1.0),
+                "detections": dets,
+            })
 
     return results
 
-def transform_coordinates_back(x, y, rotation, img_width, img_height):
-    if rotation == 90: orig_x, orig_y = y, img_height - x
-    elif rotation == 180: orig_x, orig_y = img_width - 1 - x, img_height - 1 - y
-    elif rotation == 270: orig_x, orig_y = img_width - y, x
-    else: orig_x, orig_y = x, y
-    return orig_x, orig_y
+def pdf_to_images(pdf_path: str, dpi: int = 300) -> List[np.ndarray]:
+    pages = convert_from_path(pdf_path, dpi=dpi)
+    imgs = []
+    for p in pages:
+        # convert PIL Image to OpenCV BGR
+        rgb = np.array(p)
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        imgs.append(bgr)
+    return imgs
 
-def draw_labels_on_image(image_path, x_labels, y_labels, out_path):
-    img = cv2.imread(image_path)
-    if img is None: return
-    img_height, img_width = img.shape[:2]
-    
-    for item in x_labels:
-        orig_x, orig_y = transform_coordinates_back(item['x'], item['y'], 180, img_width, img_height)
-        cv2.putText(img, str(item['value']), (orig_x, orig_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+def run_on_path(
+    path: str,
+    **kwargs,
+) -> List[Dict[str, Any]]:
+    outputs = []
+    if os.path.isdir(path):
+        for root, _, files in os.walk(path):
+            for fn in sorted(files):
+                fpath = os.path.join(root, fn)
+                lower = fn.lower()
+                try:
+                    if lower.endswith(".pdf"):
+                        images = pdf_to_images(fpath, dpi=300)
+                        for i, img in enumerate(images):
+                            res = ocr_digits(img, **kwargs)
+                            outputs.append({"source": f"{fpath}#page={i+1}", "results": res})
+                    elif any(lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"]):
+                        img = load_image(fpath)
+                        res = ocr_digits(img, **kwargs)
+                        outputs.append({"source": fpath, "results": res})
+                except Exception as e:
+                    outputs.append({"source": fpath, "error": str(e)})
+    else:
+        lower = path.lower()
+        if lower.endswith(".pdf"):
+            images = pdf_to_images(path, dpi=300)
+            for i, img in enumerate(images):
+                res = ocr_digits(img, **kwargs)
+                outputs.append({"source": f"{path}#page={i+1}", "results": res})
+        else:
+            img = load_image(path)
+            res = ocr_digits(img, **kwargs)
+            outputs.append({"source": path, "results": res})
 
-    for item in y_labels:
-        orig_x, orig_y = transform_coordinates_back(item['x'], item['y'], 90, img_width, img_height)
-        cv2.putText(img, str(item['value']), (orig_x + 15, orig_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    
-    cv2.imwrite(out_path, img)
-    print(f"標註圖已儲存：{out_path}")
-
-if __name__ == "__main__":
-    test_path = r'C:\Users\harri\Downloads\Mapping_tool\302132426.png'
-    out_img_path = test_path.replace('.png', '_labels_tuned.png')
-
-    # ==================================================================
-    # ===            請在這裡集中進行參數調校 (Tuning)             ===
-    # ==================================================================
-    
-    # --- 預處理參數 ---
-    # 建議從一個較小的值開始，目的是先分離所有輪廓
-    PREPROCESS_PARAMS = {
-        'block': 51,        # adaptiveThreshold 的區塊大小 (必須是奇數)
-        'c': 20,            # adaptiveThreshold 的常數C (值越大，文字線條越細)
-        'k_w': 0,           # 閉運算核心的寬度 (設為0則不做閉運算)
-        'k_h': 0,           # 閉運算核心的高度 (設為0則不做閉運算)
-    }
-
-    # --- 輪廓幾何過濾參數 ---
-    # 根據您期望的文字大小來設定
-    CONTOUR_FILTERS = {
-        'h_range': (0, 100),    # 高度範圍
-        'w_range': (0, 250),   # 寬度範圍
-        'ar_range': (0.5, 100)  # 寬高比範圍
-    }
-
-    # 合併所有參數
-    ALL_PARAMS = {**PREPROCESS_PARAMS, **CONTOUR_FILTERS}
-
-    # ==================================================================
-
-    print("--- 開始使用輪廓分割策略進行辨識 ---")
-    x_labels = extract_axis_labels_by_contours(test_path, rotate_angle=180, axis='x', params=ALL_PARAMS)
-    y_labels = extract_axis_labels_by_contours(test_path, rotate_angle=90, axis='y', params=ALL_PARAMS)
-    
-    # --- 對結果進行去重 ---
-    final_x_labels = [dict(t) for t in {tuple(d.items()) for d in x_labels}]
-    final_y_labels = [dict(t) for t in {tuple(d.items()) for d in y_labels}]
-    
-    print("\n--- 最終結果 ---")
-    print(f"X軸找到 {len(final_x_labels)} 個獨特座標: {[label['value'] for label in final_x_labels]}")
-    print(f"Y軸找到 {len(final_y_labels)} 個獨特座標: {[label['value'] for label in final_y_labels]}")
-
-    draw_labels_on_image(test_path, final_x_labels, final_y_labels, out_img_path)
+    return outputs
